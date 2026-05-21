@@ -1,0 +1,76 @@
+================================================================================
+RDP: «Произошла внутренняя ошибка» (mstsc), TCP 3389 открыт, NLA=0 не помогло
+Дата заметки: 2026-05-21
+ОС на цели: Windows Server 2019 / 10.0.17763.107 (то же бывает на Win10)
+Репозиторий: https://github.com/shvshnkr/fixpack (оформлено с помощью Cursor)
+================================================================================
+
+СИМПТОМЫ
+--------
+- Клиент mstsc: «Произошла внутренняя ошибка».
+- Со ВСЕХ клиентов (дом, офис) — не «один сломанный ноутбук».
+- Test-NetConnection <IP> -Port 3389 → TcpTestSucceeded : True.
+- NLA выключена (UserAuthentication=0) — не помогло.
+- Кэш RDP на клиенте — не помогло.
+
+ДИАГНОСТИКА (быстро)
+--------------------
+На клиенте:
+  Test-NetConnection <IP> -Port 3389
+  Test-NetConnection <IP> -Port 445    ← для PsExec
+
+На сервере (журнал):
+  Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational
+
+Типично при этой поломке:
+  Id 131 — принято TCP-подключение (сеть OK).
+  Id 227 — Failed OnConnected to Listener callback, err 0x8007050c
+         — spCoreConnection is NULL, err 0x8007139f
+
+Реестр (до починки):
+  fDenyTSConnections = 0
+  UserAuthentication = 0 (NLA off, тест)
+  SecurityLayer = 2   ← SSL, часто при битом/отсутствующем сертификате listener
+  SSLCertificateSHA1Hash — отсутствует (уже удалён или не создан)
+
+Службы: TermService, UmRdpService — Running, учётки стандартные
+  TermService → NT Authority\NetworkService
+  UmRdpService → LocalSystem
+
+ЧТО ПОМОГЛО
+-----------
+1. SecurityLayer с 2 на 1 (Negotiate вместо жёсткого SSL):
+     reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v SecurityLayer /t REG_DWORD /d 1 /f
+
+2. Перезапуск RDP-служб (PsExec оборвётся на net stop TermService — переподключиться):
+     net stop UmRdpService
+     net stop TermService
+     net start TermService
+     net start UmRdpService
+
+Опционально (если есть SSLCertificateSHA1Hash):
+     reg delete "...\RDP-Tcp" /v SSLCertificateSHA1Hash /f
+     затем перезапуск TermService
+
+После починки можно вернуть NLA (UserAuthentication=1) и проверить RDP снова.
+
+ДОСТУП БЕЗ RDP
+--------------
+  net use \\<IP>\IPC$ /user:<ИМЯ_ПК>\<локальный_админ> <пароль>
+  psexec \\<IP> -h cmd
+  (без -u/-p если IPC$ уже с сессией)
+
+НЕ ПУТАТЬ С
+-----------
+- 3389 закрыт / VPN — тогда TcpTestSucceeded False.
+- Неверный пароль PsExec — «неверное имя пользователя или пароль» (кириллица в консоли кракозябрами).
+- Взлом: при этой ошибке TCP доходит и в логе 131 есть; чаще listener/сертификат, не «отключили RDP хакером».
+
+СКРИПТЫ В ЭТОЙ ПАПКЕ
+--------------------
+  local\fix-rdp-listener.cmd
+  local\Fix-RdpListener.ps1
+  remote\fix-rdp-listener-target.cmd   — выполняется НА цели
+  remote\run-via-psexec.cmd            — запуск с jump-хоста
+
+================================================================================
