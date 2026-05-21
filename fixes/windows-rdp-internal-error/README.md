@@ -1,55 +1,66 @@
 # RDP: внутренняя ошибка, 3389 открыт (Event 227)
 
-Полная памятка: [NOTE.txt](NOTE.txt)
+Памятка: [NOTE.txt](NOTE.txt) · **Команды без скриптов: [COMMANDS.md](COMMANDS.md)**
 
-## Быстрый фикс на цели (консоль / VNC)
+## Команды (copy-paste)
 
-```cmd
-local\fix-rdp-listener.cmd
-```
-
-или PowerShell (админ):
+### С вашего ПК
 
 ```powershell
-.\local\Fix-RdpListener.ps1
+Test-NetConnection 192.168.0.171 -Port 3389
+Test-NetConnection 192.168.0.171 -Port 445
 ```
 
-## С jump-хоста (PsExec, 445 открыт)
+### Jump → цель (PsExec)
 
 ```cmd
-remote\run-via-psexec.cmd \\192.168.0.171
+net use \\192.168.0.171\IPC$ /user:ИМЯПК\Administrator пароль
+psexec \\192.168.0.171 -h cmd
 ```
 
-С учёткой в параметрах:
+### Починка на цели (по одной строке)
 
 ```cmd
-remote\run-via-psexec.cmd \\192.168.0.171 ИМЯПК\Administrator пароль
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v SecurityLayer /t REG_DWORD /d 1 /f
 ```
 
-## Online run (после заливки на GitHub)
+```cmd
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v SSLCertificateSHA1Hash /f
+```
+
+```cmd
+net stop UmRdpService
+net stop TermService
+net start TermService
+net start UmRdpService
+```
+
+Полный список (диагностика, NLA, однострочник через psexec): **[COMMANDS.md](COMMANDS.md)**
+
+---
+
+## Скрипты (по желанию)
+
+| Где | Файл |
+|-----|------|
+| На цели (VNC) | `local\fix-rdp-listener.cmd` |
+| На цели | `local\Fix-RdpListener.ps1` |
+| С jump | `remote\run-via-psexec.cmd \\192.168.0.171` |
+
+## Online run
 
 ```powershell
 irm https://raw.githubusercontent.com/shvshnkr/fixpack/main/fixes/windows-rdp-internal-error/local/Invoke-Fix.ps1 | iex
 ```
 
-С jump-хоста (скачивает target-скрипт и гоняет через PsExec — нужен интернет на jump):
+Только команды в терминале (без irm) — см. [COMMANDS.md](COMMANDS.md).
 
-```cmd
-curl -fsSL -o %TEMP%\fix-rdp-target.cmd https://raw.githubusercontent.com/shvshnkr/fixpack/main/fixes/windows-rdp-internal-error/remote/fix-rdp-listener-target.cmd
-psexec \\192.168.0.171 -h -c %TEMP%\fix-rdp-target.cmd
-```
-
-## Fallback
-
-1. Скачать репозиторий ZIP с GitHub.
-2. На цели: `fixes\windows-rdp-internal-error\local\fix-rdp-listener.cmd`
-3. Или с jump: `remote\run-via-psexec.cmd \\IP`
-
-## После скрипта
-
-Проверить mstsc. При необходимости включить NLA обратно:
+## NLA обратно
 
 ```cmd
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 1 /f
-net stop UmRdpService & net stop TermService & net start TermService & net start UmRdpService
+net stop UmRdpService
+net stop TermService
+net start TermService
+net start UmRdpService
 ```

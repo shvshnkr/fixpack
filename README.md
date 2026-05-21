@@ -8,37 +8,48 @@
 
 | Способ | Когда |
 |--------|--------|
-| **Online run** | Есть интернет, доверяете raw.githubusercontent.com |
-| **Скачал — запустил** | Клонировали репо или скачали ZIP |
-| **Remote** | С jump-хоста (на Windows часто PsExec + SMB; на Linux — ssh) |
+| **Команды в README / COMMANDS.md** | Copy-paste в cmd/PowerShell, ничего не качать |
+| **Online run** | `irm` с GitHub, если удобнее одной строкой |
+| **Скрипты в репо** | Автоматизация тех же шагов |
+| **Remote** | С jump-хоста (Windows: PsExec; Linux: ssh) |
 
 Структура одной темы:
 
 ```
 fixes/<platform>-<slug>/
-  NOTE.txt          — симптомы, диагностика, что помогло
-  README.md         — команды copy-paste + online run
+  NOTE.txt          — краткая памятка
+  COMMANDS.md       — все команды copy-paste (без скриптов)
+  README.md         — кратко + ссылка на COMMANDS.md
   local/            — на проблемной машине
   remote/           — с другого хоста (опционально; формат зависит от ОС)
 ```
 
 Префикс в slug: `windows-`, `linux-`, … — чтобы не путать платформы.
 
-## Online run
+## Репозиторий
 
-Репозиторий: **https://github.com/shvshnkr/fixpack**
+**https://github.com/shvshnkr/fixpack**
 
-```powershell
-# Windows: локально на проблемном ПК (админ)
-irm https://raw.githubusercontent.com/shvshnkr/fixpack/main/fixes/windows-rdp-internal-error/local/Invoke-Fix.ps1 | iex
-```
+### RDP — команды без скачивания
+
+Открыть в браузере и копировать:  
+[fixes/windows-rdp-internal-error/COMMANDS.md](fixes/windows-rdp-internal-error/COMMANDS.md)
+
+Минимум на цели (cmd, админ):
 
 ```cmd
-REM Windows: с jump-хоста через PsExec
-fixes\windows-rdp-internal-error\remote\run-via-psexec.cmd \\192.168.0.171
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v SecurityLayer /t REG_DWORD /d 1 /f
+net stop UmRdpService
+net stop TermService
+net start TermService
+net start UmRdpService
 ```
 
-Fallback: [скачать ZIP](https://github.com/shvshnkr/fixpack/archive/refs/heads/main.zip) и запустить скрипт из папки темы.
+### Online run / скрипты (необязательно)
+
+```powershell
+irm https://raw.githubusercontent.com/shvshnkr/fixpack/main/fixes/windows-rdp-internal-error/local/Invoke-Fix.ps1 | iex
+```
 
 ## Ограничения
 
